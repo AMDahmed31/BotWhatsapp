@@ -1,0 +1,15 @@
+{
+    "autoBroadcast": {
+        "enabled": true,
+        "schedule": "0 */3 * * *",
+        "timezone": "Africa/Cairo",
+        "delayBetweenGroups": 2000,
+        "groups": [
+            "120363404037011063@g.us",
+            "120363422280225750@g.us",
+            "120363421327093924@g.us",
+            "120363403331413499@g.us"
+        ],
+        "messagePrefix": ""
+    }
+}
