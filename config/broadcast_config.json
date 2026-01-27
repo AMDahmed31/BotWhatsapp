@@ -1,7 +1,7 @@
 {
     "autoBroadcast": {
         "enabled": true,
-        "schedule": "0 */3 * * *",
+        "schedule": "0 */2 * * *",
         "timezone": "Africa/Cairo",
         "delayBetweenGroups": 2000,
         "groups": [

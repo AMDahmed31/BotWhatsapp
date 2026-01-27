@@ -15,7 +15,9 @@
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "adhan": "^4.4.3",
     "axios": "^1.13.2",
+    "fs": "^0.0.1-security",
     "node-cron": "^4.2.1",
+    "path": "^0.12.7",
     "pino": "^10.2.0",
     "qrcode-terminal": "^0.12.0"
   }

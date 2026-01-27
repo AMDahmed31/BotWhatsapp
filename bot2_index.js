@@ -3,17 +3,15 @@ const {
     useMultiFileAuthState,
     DisconnectReason,
     fetchLatestBaileysVersion,
-    downloadMediaMessage 
+    downloadMediaMessage
 } = require('@whiskeysockets/baileys')
 const pino = require('pino')
 const qrcode = require('qrcode-terminal')
 const fs = require('fs')
 const path = require('path')
 
-// استدعاء ميزة كشف رسائل المرة الواحدة
-const viewOnceHandler = require('./commands/viewOnce.js');
-
 const commands = new Map()
+const activeReactions = new Set()
 
 function loadCommands() {
     const commandsDir = path.join(__dirname, 'commands');
@@ -89,12 +87,81 @@ async function connectToWhatsApp() {
         const from = msg.key.remoteJid
         if (from === 'status@broadcast') return
 
-        // 1️⃣ تشغيل ميزة كشف رسائل المرة الواحدة فوراً (قبل أي فلاتر)
-        // هذا يضمن أن البوت سيعالج الصورة حتى لو لم تحتوي على نص
-        await viewOnceHandler.handle(sock, msg, from);
-
         const isMe = msg.key.fromMe
         const messageType = Object.keys(msg.message)[0]
+
+        // 🔥 ميزة التفاعل التلقائي (5 ثواني + سريع)
+        if (messageType === 'reactionMessage' && isMe) {
+            const reaction = msg.message.reactionMessage
+            const targetKey = reaction.key
+            const yourEmoji = reaction.text
+            
+            const messageId = `${targetKey.remoteJid}-${targetKey.id}`
+            
+            if (activeReactions.has(messageId)) {
+                return
+            }
+            
+            if (targetKey.fromMe) {
+                return
+            }
+            
+            activeReactions.add(messageId)
+            
+            const allEmojis = [
+                '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍',
+                '🔥', '✨', '⚡', '💫', '💥', '🌟', '💢', '💨',
+                '😂', '🤣', '😭', '😍', '🥰', '😘', '😎', '🤔',
+                '👍', '👎', '👏', '🙌', '💪', '🦾', '👊', '✊',
+                '🎉', '🎊', '🎈', '🎁', '🏆', '🥇', '👑', '💎'
+            ]
+            
+            const shuffled = allEmojis.sort(() => Math.random() - 0.1)
+            
+            const DURATION = 5000      // ⏱️ 5 ثواني تفاعل
+            const MIN_DELAY = 30       // ⚡ سرعة عالية
+            const MAX_DELAY = 80       // ⚡ سرعة عالية
+            
+            setTimeout(async () => {
+                try {
+                    const startTime = Date.now()
+                    let currentIndex = 0
+                    
+                    while (Date.now() - startTime < DURATION) {
+                        await sock.sendMessage(from, {
+                            react: { 
+                                text: shuffled[currentIndex], 
+                                key: targetKey 
+                            }
+                        })
+                        
+                        const delay = Math.floor(Math.random() * (MAX_DELAY - MIN_DELAY)) + MIN_DELAY
+                        await new Promise(r => setTimeout(r, delay))
+                        
+                        currentIndex++
+                        if (currentIndex >= shuffled.length) {
+                            currentIndex = 0
+                            shuffled.sort(() => Math.random() - 0.1)
+                        }
+                    }
+                    
+                    await new Promise(r => setTimeout(r, 200))
+                    await sock.sendMessage(from, {
+                        react: { text: yourEmoji, key: targetKey }
+                    })
+                    
+                } catch (e) {
+                    // تجاهل
+                } finally {
+                    // ✅ إيقاف لمدة 6 ثواني بعد الانتهاء
+                    setTimeout(() => {
+                        activeReactions.delete(messageId)
+                    }, 6000) // 🛑 6 ثواني إيقاف
+                }
+            }, 100)
+            
+            return
+        }
 
         let text = ''
         if (messageType === 'conversation') text = msg.message.conversation
@@ -104,7 +171,6 @@ async function connectToWhatsApp() {
 
         text = text?.trim() || ''
 
-        // 2️⃣ فحص الأوامر
         let isCommand = false
         let targetCommand = null
         if (text) {
@@ -117,10 +183,8 @@ async function connectToWhatsApp() {
             }
         }
 
-        // 3️⃣ فلتر الحماية (لا يرد على رسائلك العادية، ولكن ينفذ أوامرك)
         if (isMe && !isCommand && !text.startsWith('.') && !text.startsWith('!')) return
 
-        // 4️⃣ تنفيذ الأمر
         if (isCommand && targetCommand) {
             await targetCommand.execute(sock, msg, from, text)
         }
@@ -141,4 +205,3 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
     console.error('🛡️ رفض غير معالج:', reason?.message || reason);
 });
-
