@@ -10,7 +10,7 @@ module.exports = {
 
     async execute(sock, msg, from, text) {
         // --- إعدادات ElevenLabs ---
-        const ELEVENLABS_API_KEY = 'sk_3ffa39a094071a457f25e72cfe12bb044671b0c3b18f7e4a';
+        const ELEVENLABS_API_KEY ="00d2c8b4456c54c4284083dea7fefaadea060f6c6606ae79540d5ba0711c0b7f";
         const VOICE_ID = 'pNInz6obpgDQGcFmaJgB'; 
         // -------------------------
 

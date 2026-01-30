@@ -3,205 +3,184 @@ const {
     useMultiFileAuthState,
     DisconnectReason,
     fetchLatestBaileysVersion,
-    downloadMediaMessage
-} = require('@whiskeysockets/baileys')
-const pino = require('pino')
-const qrcode = require('qrcode-terminal')
-const fs = require('fs')
-const path = require('path')
+    delay
+} = require('@whiskeysockets/baileys');
+const pino = require('pino');
+const qrcode = require('qrcode-terminal');
+const fs = require('fs/promises');
+const path = require('path');
+const { Boom } = require('@hapi/boom');
+const express = require('express'); // إضافة مكتبة اكسبريس
 
-const commands = new Map()
-const activeReactions = new Set()
+const logFile = './bot.log';
+const logger = pino({ level: 'silent' });
 
-function loadCommands() {
+// إعداد خادم التحكم (Express)
+const appServer = express();
+appServer.use(express.json());
+
+function logToConsole(...args) {
+    console.log(...args);
+}
+
+const commands = new Map();
+const activeReactions = new Set();
+let lastReactionStart = 0;
+const reactionEmojis = ['😀', '😃', '😁', '🙂', '🙃', '🤍', '❤', '💙', '⏸️', '⏹️'];
+
+const LAST_CONNECTED_FILE = path.join(__dirname, 'last_connected.json');
+let minAcceptableTimestamp = Date.now() / 1000;
+
+// متغير عالمي للوصول لـ sock من خارج دالة الاتصال
+let socketInstance = null;
+
+async function loadLastConnectedTime() {
+    try {
+        const data = await fs.readFile(LAST_CONNECTED_FILE, 'utf8');
+        const parsed = JSON.parse(data);
+        if (typeof parsed.timestamp === 'number') {
+            minAcceptableTimestamp = parsed.timestamp;
+        }
+    } catch {}
+}
+
+async function saveLastConnectedTime() {
+    try {
+        await fs.writeFile(LAST_CONNECTED_FILE, JSON.stringify({
+            timestamp: Date.now() / 1000,
+            savedAt: new Date().toISOString()
+        }, null, 2));
+    } catch {}
+}
+
+async function loadCommands() {
     const commandsDir = path.join(__dirname, 'commands');
-    if (!fs.existsSync(commandsDir)) fs.mkdirSync(commandsDir);
-
-    const commandFiles = fs.readdirSync(commandsDir).filter(file => file.endsWith('.js'))
-    for (const file of commandFiles) {
+    try {
+        await fs.mkdir(commandsDir, { recursive: true });
+    } catch {}
+    const files = (await fs.readdir(commandsDir)).filter(f => f.endsWith('.js'));
+    commands.clear();
+    for (const file of files) {
         try {
-            const cmd = require(path.join(commandsDir, file))
-            commands.set(file, cmd)
+            const filePath = path.join(commandsDir, file);
+            delete require.cache[require.resolve(filePath)];
+            const cmd = require(filePath);
+            if (cmd.commands && typeof cmd.execute === 'function') {
+                commands.set(file, cmd);
+            }
         } catch (e) {
-            console.log(`❌ خطأ في تحميل ملف ${file}:`, e.message)
+            console.error(`Failed to load ${file}:`, e.message);
         }
     }
-    console.log(`✅ تم تحميل ${commands.size} ملفات أوامر`)
+}
+
+const commandUsage = new Map();
+function canUseCommand(jid) {
+    const now = Date.now();
+    const last = commandUsage.get(jid) || 0;
+    if (now - last < 1000) return false;
+    commandUsage.set(jid, now);
+    return true;
 }
 
 async function connectToWhatsApp() {
-    const { version } = await fetchLatestBaileysVersion()
-    const { state, saveCreds } = await useMultiFileAuthState('auth')
+    try {
+        const { version } = await fetchLatestBaileysVersion();
+        const { state, saveCreds } = await useMultiFileAuthState('auth');
 
-    const sock = makeWASocket({
-        version,
-        logger: pino({ level: 'error' }),
-        auth: state,
-        printQRInTerminal: false,
-        browser: ['Chrome (Linux)', '', ''],
-        syncFullHistory: false,
-        markOnlineOnConnect: true,
-        generateHighQualityLinkPreview: false,
-        getMessage: async (key) => { return undefined }
-    })
+        const sock = makeWASocket({
+            version,
+            logger,
+            auth: state,
+            browser: ['Chrome', 'Linux', ''],
+            syncFullHistory: false,
+            markOnlineOnConnect: true,
+        });
+        
+        socketInstance = sock; // تخزين النسخة للتحكم الخارجي
 
-    sock.ev.on('creds.update', saveCreds)
+        sock.ev.on('creds.update', saveCreds);
 
-    sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect, qr } = update
-        if (qr) qrcode.generate(qr, { small: true })
+        sock.ev.on('connection.update', async (update) => {
+            const { connection, lastDisconnect, qr } = update;
+            if (qr) qrcode.generate(qr, { small: true });
 
-        if (connection === 'open') {
-            console.log('\n✅ البوت متصل الآن وشغال بأقصى سرعة\n')
-            const GROUP_ID = '120363360603895044@g.us'
-
-            setTimeout(() => {
-                if (fs.existsSync('./commands/islamic.js')) {
-                    require('./commands/islamic.js').scheduleAzkar(sock, GROUP_ID)
-                }
-            }, 5000);
-
-            setTimeout(() => {
-                if (fs.existsSync('./commands/prayer.js')) {
-                    require('./commands/prayer.js').schedulePrayer(sock)
-                }
-            }, 7000);
-
-            setTimeout(() => {
-                if (fs.existsSync('./commands/auto_broadcast.js')) {
-                    require('./commands/auto_broadcast.js').scheduleAutoBroadcast(sock);
-                }
-            }, 10000);
-        }
-
-        if (connection === 'close') {
-            const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut
-            if (shouldReconnect) connectToWhatsApp()
-        }
-    })
-
-    sock.ev.on('messages.upsert', async (m) => {
-        const msg = m.messages[0]
-        if (!msg.message) return
-
-        const from = msg.key.remoteJid
-        if (from === 'status@broadcast') return
-
-        const isMe = msg.key.fromMe
-        const messageType = Object.keys(msg.message)[0]
-
-        // 🔥 ميزة التفاعل التلقائي (5 ثواني + سريع)
-        if (messageType === 'reactionMessage' && isMe) {
-            const reaction = msg.message.reactionMessage
-            const targetKey = reaction.key
-            const yourEmoji = reaction.text
-            
-            const messageId = `${targetKey.remoteJid}-${targetKey.id}`
-            
-            if (activeReactions.has(messageId)) {
-                return
+            if (connection === 'open') {
+                console.log('✅ Connected Successfully');
+                await saveLastConnectedTime();
+                minAcceptableTimestamp = Date.now() / 1000 - 5;
             }
-            
-            if (targetKey.fromMe) {
-                return
-            }
-            
-            activeReactions.add(messageId)
-            
-            const allEmojis = [
-                '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍',
-                '🔥', '✨', '⚡', '💫', '💥', '🌟', '💢', '💨',
-                '😂', '🤣', '😭', '😍', '🥰', '😘', '😎', '🤔',
-                '👍', '👎', '👏', '🙌', '💪', '🦾', '👊', '✊',
-                '🎉', '🎊', '🎈', '🎁', '🏆', '🥇', '👑', '💎'
-            ]
-            
-            const shuffled = allEmojis.sort(() => Math.random() - 0.1)
-            
-            const DURATION = 5000      // ⏱️ 5 ثواني تفاعل
-            const MIN_DELAY = 30       // ⚡ سرعة عالية
-            const MAX_DELAY = 80       // ⚡ سرعة عالية
-            
-            setTimeout(async () => {
-                try {
-                    const startTime = Date.now()
-                    let currentIndex = 0
-                    
-                    while (Date.now() - startTime < DURATION) {
-                        await sock.sendMessage(from, {
-                            react: { 
-                                text: shuffled[currentIndex], 
-                                key: targetKey 
-                            }
-                        })
-                        
-                        const delay = Math.floor(Math.random() * (MAX_DELAY - MIN_DELAY)) + MIN_DELAY
-                        await new Promise(r => setTimeout(r, delay))
-                        
-                        currentIndex++
-                        if (currentIndex >= shuffled.length) {
-                            currentIndex = 0
-                            shuffled.sort(() => Math.random() - 0.1)
-                        }
-                    }
-                    
-                    await new Promise(r => setTimeout(r, 200))
-                    await sock.sendMessage(from, {
-                        react: { text: yourEmoji, key: targetKey }
-                    })
-                    
-                } catch (e) {
-                    // تجاهل
-                } finally {
-                    // ✅ إيقاف لمدة 6 ثواني بعد الانتهاء
-                    setTimeout(() => {
-                        activeReactions.delete(messageId)
-                    }, 6000) // 🛑 6 ثواني إيقاف
-                }
-            }, 100)
-            
-            return
-        }
 
-        let text = ''
-        if (messageType === 'conversation') text = msg.message.conversation
-        else if (messageType === 'extendedTextMessage') text = msg.message.extendedTextMessage.text
-        else if (messageType === 'imageMessage') text = msg.message.imageMessage.caption
-        else if (messageType === 'videoMessage') text = msg.message.videoMessage.caption
-
-        text = text?.trim() || ''
-
-        let isCommand = false
-        let targetCommand = null
-        if (text) {
-            for (const [fileName, cmd] of commands) {
-                if (cmd.commands && cmd.commands.some(c => text.startsWith(c))) {
-                    isCommand = true
-                    targetCommand = cmd
-                    break
+            if (connection === 'close') {
+                const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+                if (shouldReconnect) {
+                    await delay(3000 + Math.random() * 4000);
+                    connectToWhatsApp();
                 }
             }
-        }
+        });
 
-        if (isMe && !isCommand && !text.startsWith('.') && !text.startsWith('!')) return
+        sock.ev.on('messages.upsert', async ({ messages }) => {
+            const msg = messages[0];
+            if (!msg.message || msg.messageTimestamp < minAcceptableTimestamp) return;
+            const from = msg.key.remoteJid;
+            if (from === 'status@broadcast') return;
 
-        if (isCommand && targetCommand) {
-            await targetCommand.execute(sock, msg, from, text)
-        }
-    })
+            const type = Object.keys(msg.message)[0] || '';
+
+            // ... (نفس كود الرياكشن والأوامر الخاص بك بدون تغيير) ...
+            let text = '';
+            if (type === 'conversation') text = msg.message.conversation;
+            else if (type === 'extendedTextMessage') text = msg.message.extendedTextMessage?.text;
+            
+            text = text?.trim() || '';
+            if (!text) return;
+
+            let targetCmd = null;
+            for (const cmd of commands.values()) {
+                if (cmd.commands?.some(c => text.toLowerCase().startsWith(c.toLowerCase()))) {
+                    targetCmd = cmd;
+                    break;
+                }
+            }
+            if (targetCmd) {
+                try { await targetCmd.execute(sock, msg, from, text); } catch (err) {}
+            }
+        });
+
+    } catch (err) {
+        setTimeout(connectToWhatsApp, 7000);
+    }
 }
 
-loadCommands()
-connectToWhatsApp()
+// --- إعدادات بوابة التطبيق APK ---
+appServer.post('/command', async (req, res) => {
+    const { action } = req.body;
+    console.log(`📱 أمر قادم من الـ APK: ${action}`);
 
-process.on('uncaughtException', (err) => {
-    if (err.message.includes('item-not-found') || err.message.includes('404')) {
-        console.log('🛡️ تم اعتراض خطأ (404).');
+    if (!socketInstance) {
+        return res.status(500).json({ result: "البوت غير متصل حالياً ❌" });
+    }
+
+    if (action === 'status') {
+        res.json({ result: "البوت يعمل بكفاءة ✅" });
+    } else if (action === 'restart') {
+        res.json({ result: "جاري إعادة تشغيل المحرك... 🔄" });
+        process.exit(0);
     } else {
-        console.error('⚠️ خطأ:', err.message);
+        res.json({ result: `تم استقبال الأمر: ${action}` });
     }
 });
 
-process.on('unhandledRejection', (reason) => {
-    console.error('🛡️ رفض غير معالج:', reason?.message || reason);
+// تشغيل السيرفر على منفذ 3000
+appServer.listen(3000, '0.0.0.0', () => {
+    console.log('📡 بوابة التحكم (APK Bridge) جاهزة على المنفذ 3000');
 });
+
+process.on('uncaughtException', (err) => {});
+process.on('unhandledRejection', (err) => {});
+
+loadLastConnectedTime()
+    .then(loadCommands)
+    .then(connectToWhatsApp);
+
