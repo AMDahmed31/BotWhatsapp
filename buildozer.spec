@@ -7,7 +7,8 @@ source.include_exts = py,png,jpg,kv,atlas,js,json
 version = 0.1
 
 # المكتبات المطلوبة للواجهة والإنترنت
-requirements = python3, kivy==2.3.0, kivymd, pillow, requests, urllib3, charset-normalizer, idna
+#requirements = python3, kivy==2.3.0, kivymd, pillow, requests, urllib3, charset-normalizer, idna
+requirements = python3, kivy==2.3.0, kivymd, pillow, requests
 
 orientation = portrait
 fullscreen = 0
