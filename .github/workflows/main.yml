@@ -1,46 +1,27 @@
-name: Build Android APK
+name: Build APK with Docker
 on: [push]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # 1. تحميل ملفاتك من المستودع
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.9'
-
-      # إضافة ذاكرة تخزين ذكية (Cache)
-      - name: Cache Buildozer data
-        uses: actions/cache@v4
-        with:
-          path: .buildozer
-          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
-
-      - name: Install Buildozer dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential git ffmpeg libgstreamer1.0-dev qmlscene qt5-qmake python3-setuptools libffi-dev libssl-dev
-          pip3 install --user --upgrade buildozer Cython==0.29.33
-
+      # 2. بناء التطبيق باستخدام "حاوية" جاهزة فيها كل الأدوات
+      # الحل ده بيوفر وقت التحميل وبيمنع انقطاع الاتصال
       - name: Build with Buildozer
-        run: |
-          # إجبار السيرفر على استخدام ملفات الأندرويد الجاهزة عنده لتجنب الـ Broken Pipe
-          export ANDROID_SDK_HOME=$ANDROID_HOME
-          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk-bundle
-          
-          # رفع وقت الانتظار لأقصى درجة وتفعيل التفاصيل الكاملة
-          export BUILDOZER_TIMEOUT=2000
-          export BUILDOZER_LOG_LEVEL=2
-          
-          # تنظيف وبناء
-          rm -rf .buildozer/android/platform/build-arm64-v8a/dists
-          yes | buildozer android debug || (sleep 60 && yes | buildozer android debug)
+        uses: ArtemSBulgakov/buildozer-action@v1
+        id: buildozer
+        with:
+          command: buildozer android debug
+          buildozer_version: stable
+          version: 3.3.9
 
-      - name: Upload APK Artifact
+      # 3. رفع ملف الـ APK الناتج عشان تحمله
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: WhatsApp-Bot-A7md-Final
+          name: WhatsApp-Bot-Final
           path: bin/*.apk
