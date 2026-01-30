@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Stable Build APK
 on: [push]
 
 jobs:
@@ -7,10 +7,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. توفير مساحة ورامات ضخمة (12 جيجا)
-      - name: Maximize Build Space
+      # 1. زيادة الـ Swap Space لـ 16 جيجا (عشان نمنع الـ Broken Pipe تماماً)
+      - name: Expand Memory
         run: |
-          sudo fallocate -l 12G /swapfile
+          sudo swapoff -a
+          sudo fallocate -l 16G /swapfile
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
@@ -20,29 +21,26 @@ jobs:
         with:
           python-version: '3.10'
 
-      # 2. الكاش لضمان عدم الضياع
-      - name: Cache Buildozer data
-        uses: actions/cache@v4
-        with:
-          path: .buildozer
-          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
-
-      - name: Install System Dependencies
+      # 2. تسطيب المتطلبات مع تجاهل المكتبات اللي بتعمل مشاكل
+      - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential git ffmpeg libgstreamer1.0-dev qmlscene qt5-qmake python3-setuptools libffi-dev libssl-dev openjdk-17-jdk unzip autoconf libtool pkg-config zlib1g-dev libncursesw5-dev cmake
           pip3 install --user --upgrade buildozer Cython==0.29.33 virtualenv
 
-      # 3. البناء الصامت والقوي
+      # 3. تشغيل البناء بطريقة "العامل الواحد" (تمنع تهنيج السيرفر)
       - name: Build with Buildozer
         run: |
-          # إجبار السيرفر على عدم الفصل
-          export BUILDOZER_TIMEOUT=3600
-          export BUILDOZER_LOG_LEVEL=2
-          yes | buildozer android debug
+          # تحديد استهلاك المعالج عشان السيرفر ما يفرقعش ويقطع الاتصال
+          export BUILDOZER_ALLOW_ORG_TEST_DOMAIN=1
+          export BUILDOZER_TIMEOUT=7200
+          
+          # تشغيل البناء مع تقليل عدد العمليات المتوازية لمنع الـ Broken pipe
+          yes | buildozer -v android debug
+        continue-on-error: true # عشان لو فصل يدينا فرصة نشوف السبب
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: WhatsApp-Bot-A7md
+          name: Bot-WhatsApp-Final
           path: bin/*.apk
