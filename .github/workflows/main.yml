@@ -1,27 +1,49 @@
-name: Build APK with Docker
+name: Build APK with Swap
 on: [push]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 1. تحميل ملفاتك من المستودع
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # 2. بناء التطبيق باستخدام "حاوية" جاهزة فيها كل الأدوات
-      # الحل ده بيوفر وقت التحميل وبيمنع انقطاع الاتصال
-      - name: Build with Buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
-        id: buildozer
+      # 1. زراعة رامات وهمية (Swap) عشان السيرفر ما يفرقعش
+      - name: Add Swap Space
+        run: |
+          sudo fallocate -l 4G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h  # عرض حجم الرامات بعد الزيادة للتأكد
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          command: buildozer android debug
-          buildozer_version: stable
-          version: 3.3.9
+          python-version: '3.9'
 
-      # 3. رفع ملف الـ APK الناتج عشان تحمله
+      # 2. الكاش عشان لو عدنا المحاولة ما نحملش من الأول
+      - name: Cache Buildozer data
+        uses: actions/cache@v4
+        with:
+          path: .buildozer
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git ffmpeg libgstreamer1.0-dev qmlscene qt5-qmake python3-setuptools libffi-dev libssl-dev openjdk-17-jdk unzip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev
+          pip3 install --user --upgrade buildozer Cython==0.29.33 virtualenv
+
+      - name: Build with Buildozer
+        run: |
+          # تنظيف أي بقايا من المحاولات الفاشلة
+          rm -rf .buildozer/android/platform/build-arm64-v8a/dists
+          
+          # البناء مع استخدام الرامات الجديدة
+          yes | buildozer android debug
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: WhatsApp-Bot-Final
+          name: WhatsApp-Bot-APK
           path: bin/*.apk
