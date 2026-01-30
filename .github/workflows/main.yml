@@ -7,10 +7,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. زيادة الـ Swap Space لـ 16 جيجا (عشان نمنع الـ Broken Pipe تماماً)
       - name: Expand Memory
         run: |
-          sudo swapoff -a
           sudo fallocate -l 16G /swapfile
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
@@ -21,26 +19,26 @@ jobs:
         with:
           python-version: '3.10'
 
-      # 2. تسطيب المتطلبات مع تجاهل المكتبات اللي بتعمل مشاكل
       - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential git ffmpeg libgstreamer1.0-dev qmlscene qt5-qmake python3-setuptools libffi-dev libssl-dev openjdk-17-jdk unzip autoconf libtool pkg-config zlib1g-dev libncursesw5-dev cmake
           pip3 install --user --upgrade buildozer Cython==0.29.33 virtualenv
 
-      # 3. تشغيل البناء بطريقة "العامل الواحد" (تمنع تهنيج السيرفر)
       - name: Build with Buildozer
         run: |
-          # تحديد استهلاك المعالج عشان السيرفر ما يفرقعش ويقطع الاتصال
-          export BUILDOZER_ALLOW_ORG_TEST_DOMAIN=1
-          export BUILDOZER_TIMEOUT=7200
-          
-          # تشغيل البناء مع تقليل عدد العمليات المتوازية لمنع الـ Broken pipe
+          # أمر البناء المباشر
           yes | buildozer -v android debug
-        continue-on-error: true # عشان لو فصل يدينا فرصة نشوف السبب
+        
+      # الخطوة دي هتطبع لنا مكان الملف بالظبط لو تاه مننا
+      - name: Locate APK File
+        run: |
+          echo "Searching for APK files..."
+          find . -name "*.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Bot-WhatsApp-Final
-          path: bin/*.apk
+          name: WhatsApp-Bot-Final
+          # هنا بنخلي البحث أشمل عشان يلاقيه في أي مجلد bin
+          path: "**/*.apk" 
