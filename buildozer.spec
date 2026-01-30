@@ -23,7 +23,7 @@ source.exclude_patterns = LICENSE, README.md, *.pyc, .gitignore
 version = 1.0.0
 
 # المتطلبات - المكتبات المطلوبة
-requirements = python3,kivy==2.3.0,kivymd==1.1.1,pillow,requests,urllib3,certifi,charset-normalizer,idna
+requirements = python3,kivy==2.3.0,kivymd>=1.2.0,pillow,requests,urllib3,certifi,charset-normalizer,idna
 
 # التوجهات المدعومة
 orientation = portrait
