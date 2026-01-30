@@ -12,10 +12,12 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
+      # إضافة ذاكرة تخزين (Cache) لحل مشكلة الـ Broken Pipe
+      - name: Cache Buildozer data
+        uses: actions/cache@v4
         with:
-          node-version: '18'
+          path: .buildozer
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
 
       - name: Install Buildozer dependencies
         run: |
@@ -25,16 +27,15 @@ jobs:
 
       - name: Build with Buildozer
         run: |
-          # 1. تنظيف عميق للملفات المؤقتة عشان الـ Broken Pipe
+          # تنظيف الملفات التالفة لضمان بناء نظيف
           rm -rf .buildozer/android/platform/build-arm64-v8a/dists
-          rm -rf .buildozer/android/platform/build
           
-          # 2. أمر البناء مع "نظام الأمان" (إعادة محاولة بعد 20 ثانية لو السيرفر هنج)
-          # الـ yes بتوافق على الرخص أوتوماتيك
-          yes | buildozer android debug || (sleep 20 && yes | buildozer android debug)
+          # إعطاء السيرفر وقت أطول (25 دقيقة) عشان ما يقطعش
+          export BUILDOZER_TIMEOUT=1500
+          yes | buildozer android debug || (sleep 30 && yes | buildozer android debug)
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WhatsApp-Bot-A7md
+          name: WhatsApp-Bot-Final
           path: bin/*.apk
