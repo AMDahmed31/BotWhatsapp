@@ -12,10 +12,10 @@ jobs:
     
     steps:
     - name: 📥 Checkout Repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: 🐍 Setup Python 3.9
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.9'
 
@@ -147,7 +147,7 @@ jobs:
         ls -lah apk-output/ 2>/dev/null || echo "No files copied"
 
     - name: 📤 Upload APK Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: success()
       with:
         name: BotWhatsapp-APK
@@ -159,7 +159,7 @@ jobs:
         retention-days: 30
 
     - name: 📤 Upload APK (Fallback)
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: All-APK-Files
