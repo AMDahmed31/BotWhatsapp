@@ -1,30 +1,29 @@
-from kivymd.app import MDApp
-from kivymd.uix.button import MDRaisedButton
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.image import Image
+name: Build Android APK
+on: [push]
 
-class BotApp(MDApp):
-    def build(self):
-        self.theme_cls.primary_palette = "Green"
-        layout = BoxLayout(orientation='vertical', padding=20, spacing=10)
-        
-        # مكان صورة الـ QR
-        self.qr_img = Image(source='qr.png') 
-        layout.add_widget(self.qr_img)
-
-        # زر التشغيل
-        layout.add_widget(MDRaisedButton(
-            text="تشغيل البوت", pos_hint={'center_x': .5},
-            on_release=lambda x: print("Starting Bot...")
-        ))
-
-        # زر مسح البيانات
-        layout.add_widget(MDRaisedButton(
-            text="مسح بيانات الحفظ", md_bg_color=(1, 0, 0, 1),
-            pos_hint={'center_x': .5},
-            on_release=lambda x: print("Clearing Session...")
-        ))
-
-        return layout
-
-BotApp().run()
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install Buildozer dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git ffmpeg libgstreamer1.0-dev qmlscene qt5-qmake python3-setuptools libffi-dev libssl-dev
+          pip3 install --user --upgrade buildozer Cython==0.29.33
+      - name: Build with Buildozer
+        run: |
+          yes | buildozer android debug
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bot-WhatsApp-APK
+          path: bin/*.apk
