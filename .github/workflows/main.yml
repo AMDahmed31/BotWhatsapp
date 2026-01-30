@@ -1,4 +1,4 @@
-name: Stable Build APK
+name: Final Build APK
 on: [push]
 
 jobs:
@@ -7,6 +7,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 1. تزويد الذاكرة لمنع أي توقف
       - name: Expand Memory
         run: |
           sudo fallocate -l 16G /swapfile
@@ -19,26 +20,23 @@ jobs:
         with:
           python-version: '3.10'
 
+      # 2. تسطيب الأدوات (بدون المكتبة المسببة للمشاكل)
       - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential git ffmpeg libgstreamer1.0-dev qmlscene qt5-qmake python3-setuptools libffi-dev libssl-dev openjdk-17-jdk unzip autoconf libtool pkg-config zlib1g-dev libncursesw5-dev cmake
           pip3 install --user --upgrade buildozer Cython==0.29.33 virtualenv
 
+      # 3. البناء (مع إجبار البناء للنهاية)
       - name: Build with Buildozer
         run: |
-          # أمر البناء المباشر
           yes | buildozer -v android debug
-        
-      # الخطوة دي هتطبع لنا مكان الملف بالظبط لو تاه مننا
-      - name: Locate APK File
-        run: |
-          echo "Searching for APK files..."
-          find . -name "*.apk"
 
+      # 4. البحث عن الملف ورفعه (دي أهم خطوة عندك دلوقتى)
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: WhatsApp-Bot-Final
-          # هنا بنخلي البحث أشمل عشان يلاقيه في أي مجلد bin
-          path: "**/*.apk" 
+          name: Game-Package-Ready
+          # السطر ده بيدور في كل المجلدات الفرعية عن أي ملف apk
+          path: ./**/*.apk
+          if-no-files-found: error
