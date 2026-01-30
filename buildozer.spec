@@ -59,7 +59,8 @@ fullscreen = 0
 android.enable_androidx = True
 
 # معمارية المعالج
-android.archs = arm64-v8a,armeabi-v7a
+#android.archs = arm64-v8a,armeabi-v7a
+android.archs = arm64-v8a
 
 # السماح بالنسخ الاحتياطي
 android.allow_backup = True
