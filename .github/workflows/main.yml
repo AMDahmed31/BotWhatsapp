@@ -12,7 +12,7 @@ jobs:
         with:
           python-version: '3.9'
 
-      # استخدام الكاش المتقدم
+      # إضافة ذاكرة تخزين ذكية (Cache)
       - name: Cache Buildozer data
         uses: actions/cache@v4
         with:
@@ -27,13 +27,13 @@ jobs:
 
       - name: Build with Buildozer
         run: |
-          # تحديد مسارات الأندرويد الجاهزة على السيرفر لتجنب التحميل الخارجي
+          # إجبار السيرفر على استخدام ملفات الأندرويد الجاهزة عنده لتجنب الـ Broken Pipe
           export ANDROID_SDK_HOME=$ANDROID_HOME
           export ANDROID_NDK_HOME=$ANDROID_HOME/ndk-bundle
           
-          # رفع مستوى التفاصيل عشان نعرف العطل فين بالظبت لو حصل
+          # رفع وقت الانتظار لأقصى درجة وتفعيل التفاصيل الكاملة
+          export BUILDOZER_TIMEOUT=2000
           export BUILDOZER_LOG_LEVEL=2
-          export BUILDOZER_TIMEOUT=1800
           
           # تنظيف وبناء
           rm -rf .buildozer/android/platform/build-arm64-v8a/dists
@@ -42,5 +42,5 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WhatsApp-Bot-Success
+          name: WhatsApp-Bot-A7md-Final
           path: bin/*.apk
