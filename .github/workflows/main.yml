@@ -1,4 +1,4 @@
-name: Final Victory Build
+name: Ultimate Success Build
 on: [push]
 
 jobs:
@@ -7,7 +7,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. تكبير الرامات لـ 16 جيجا (عشان مفيش Broken Pipe تاني)
+      # 1. تزويد الرامات لأقصى قدر ممكن لمنع الـ Broken Pipe
       - name: Maximize Memory
         run: |
           sudo fallocate -l 16G /swapfile
@@ -20,24 +20,23 @@ jobs:
         with:
           python-version: '3.10'
 
-      # 2. تسطيب الأدوات (كل اللي الأندرويد بيحتاجه)
-      - name: Install Dependencies
+      # 2. تسطيب كل المكتبات اللي الأندرويد بيحلم بيها
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential git ffmpeg libgstreamer1.0-dev qmlscene qt5-qmake python3-setuptools libffi-dev libssl-dev openjdk-17-jdk unzip autoconf libtool pkg-config zlib1g-dev libncursesw5-dev cmake
           pip3 install --user --upgrade buildozer Cython==0.29.33 virtualenv
 
-      # 3. بناء الـ APK (أهم خطوة)
+      # 3. بناء الـ APK مع إظهار كل التفاصيل (Log Level 2)
       - name: Build with Buildozer
         run: |
-          # قبول التراخيص وبدء البناء التفصيلي
+          export BUILDOZER_LOG_LEVEL=2
           yes | buildozer -v android debug
         
-      # 4. رفع الملف غصب عن أي مسار تائه
+      # 4. رفع أي ملف ينتهي بـ .apk مهما كان مكانه في السيرفر
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: A7md-Project-APK
-          # بيبحث في كل المجلدات عن أي ملف ينتهي بـ .apk
+          name: Final-Game-Result
           path: "**/*.apk"
           if-no-files-found: error
