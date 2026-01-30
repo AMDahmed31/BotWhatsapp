@@ -12,7 +12,7 @@ jobs:
         with:
           python-version: '3.9'
 
-      # إضافة ذاكرة تخزين (Cache) لحل مشكلة الـ Broken Pipe
+      # استخدام الكاش المتقدم
       - name: Cache Buildozer data
         uses: actions/cache@v4
         with:
@@ -27,15 +27,20 @@ jobs:
 
       - name: Build with Buildozer
         run: |
-          # تنظيف الملفات التالفة لضمان بناء نظيف
-          rm -rf .buildozer/android/platform/build-arm64-v8a/dists
+          # تحديد مسارات الأندرويد الجاهزة على السيرفر لتجنب التحميل الخارجي
+          export ANDROID_SDK_HOME=$ANDROID_HOME
+          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk-bundle
           
-          # إعطاء السيرفر وقت أطول (25 دقيقة) عشان ما يقطعش
-          export BUILDOZER_TIMEOUT=1500
-          yes | buildozer android debug || (sleep 30 && yes | buildozer android debug)
+          # رفع مستوى التفاصيل عشان نعرف العطل فين بالظبت لو حصل
+          export BUILDOZER_LOG_LEVEL=2
+          export BUILDOZER_TIMEOUT=1800
+          
+          # تنظيف وبناء
+          rm -rf .buildozer/android/platform/build-arm64-v8a/dists
+          yes | buildozer android debug || (sleep 60 && yes | buildozer android debug)
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WhatsApp-Bot-Final
+          name: WhatsApp-Bot-Success
           path: bin/*.apk
